@@ -8,6 +8,7 @@ clear
 clc
 close all
 
+% To calculate the runtime of this script
 tic
 
 %% Add eeglab to the matlab path
@@ -17,25 +18,77 @@ tic
 %% Set data path
 data_path = 'C:\Users\chuch\Documents\GitHub\fyrp\data\';
 lta_path = 'LTA\LTA_raw_xlsx\';
+lta_processed_path = 'preprocessed_data\LTA\';
 mta_path = 'MTA\MTA_raw_xlsx\';
+mta_processed_path = 'preprocessed_data\MTA\';
 hta_path = 'HTA\HTA_raw_xlsx\';
+hta_processed_path = 'preprocessed_data\HTA\';
+
 script_path = 'C:\Users\chuch\Documents\GitHub\fyrp\fyrp';
-% data_path = 'C:\Users\chuch\Documents\GitHub\fyrp\data\LTA\LTA_raw_xlsx\';
 cd(script_path);
+
+%% Get all the raw and xlsx files
+folders = {fullfile(data_path, lta_path), fullfile(data_path, hta_path), fullfile(data_path, mta_path)}; % List of subfolders
+file_ext_xlsx = '.xlsx'; % File extension for the xlsx files
+file_ext_raw = '.raw'; % File extension for the corresponding raw files
+
+% Store raw and xlsx file for each group in three variables
+hta_subjects = cell(1, 19);
+lta_subjects = cell(1, 14);
+mta_subjects = cell(1, 20);
+
+% Iterate through each subfolder to get the files
+for i = 1:length(folders)
+    folder = folders{i};
+    
+    % Recursively search for xlsx files in the current subfolder and its subfolders
+    xlsx_files = rdir(folder, ['**/*' file_ext_xlsx]);
+    
+    % Recursively search for raw files in the current subfolder and its subfolders
+    raw_files = rdir(folder, ['**/*' file_ext_raw]);
+    
+    % Filter out raw files starting with ".", junk files of the MacOS
+    % filesystem
+    raw_files = raw_files(arrayfun(@(x) ~startsWith(get_filename(x{1}), '.'), raw_files));
+    
+    % Ensure the number of xlsx and raw files match
+    if length(xlsx_files) ~= length(raw_files)
+        warning(['The number of xlsx and raw files in folder ' folder ' do not match']);
+        continue;
+    end
+    
+    % Iterate through each xlsx file and its corresponding raw file
+    for j = 1:length(xlsx_files)
+        xlsx_file = xlsx_files{j};
+        raw_file = raw_files{j};
+        
+        subject_files = struct('xlsx', xlsx_file, 'raw', raw_file);
+        
+        switch true
+            case strcmp(folder, fullfile(data_path, hta_path))
+                hta_subjects{j} = subject_files;
+            case strcmp(folder, fullfile(data_path, lta_path))
+                lta_subjects{j} = subject_files;
+            case strcmp(folder, fullfile(data_path, mta_path))
+                mta_subjects{j} = subject_files;
+        end
+    end
+end
 
 %% Load trial information from the E-prime xlsx file
 % There a 960 trials in totoal for each subject(160 trials/per block, 6 blocks)
+% Kai's update:
 % xlsread is not recommended in MATLAB R2019a or later for compatibility
-% considerations, all we need is
+% considerations, use readtable instead, all we need is
 % column 23: Trial number
 % column 24: CellNumber, cue probe pair AX 1, AY 2, BX 3, BY 4
 % column 45: probe.ACC modified to probe_ACC by importing
-% [a,b,c] = xlsread('./preprocessing/naseem.xlsx');
 opts = detectImportOptions(fullfile(data_path, lta_path, 'Naseem/naseem.xlsx'));
 opts.SelectedVariableNames = {'Trial', 'CellNumber', 'probe_ACC'};
 T = readtable(fullfile(data_path, lta_path, 'Naseem/naseem.xlsx'), opts);
 % summary(T)
 
+% Kai's update:
 % Some subjects don't have exactly 960 trials, so don't hardcode this
 datTrialInfo = cell(1, length(T.Trial));
 for i = 1 : length(T.Trial)
@@ -85,7 +138,7 @@ for i = 1 : length(evtList)
 end
 
 %% Add new cue events to a loaded dataset 0.1 second before time-locking event
-% todo
+% Kai's update:
 % The old method changed the urevent which contains the index of the event
 % in the original (= wurh) urevent table, this supposed to remain unchanged.
 % This method is from: https://eeglab.org/tutorials/11_Scripting/Event_Processing_command_line.html#scripts-for-creating-or-modifying-events
@@ -167,4 +220,69 @@ end
 EEG = pop_saveset( EEG, 'filename','naseem_evt.set','filepath',fullfile(data_path, lta_path, 'Naseem/'));
 eeglab redraw % Redraw the main EEGLAB window
 
+%% Load the channle location file
+EEG.chanlocs=readlocs(fullfile(data_path, 'Hydrocel GSN 128 1.0.sfp'));
+% Remove the first three channels: FidNz, FidT9, FidT10, and the last empty Cz
+EEG.chanlocs = EEG.chanlocs(4:end-1);
+
+% Set Cz as the original reference channel
+% EEG.chanlocs=pop_chanedit(EEG.chanlocs, 'load',{ fullfile(data_path, 'Hydrocel GSN 128 1.0.sfp'), 'filetype', 'sfp'});
+% [ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET); % Store dataset
+for c = 1:EEG.nbchan
+    EEG.chanlocs(c).ref = 'Cz';
+end
+EEG = pop_saveset( EEG, 'filename','naseem_chan_script.set','filepath',fullfile(data_path, lta_path, 'Naseem/'));
+
+%% High pass filtering the data at 0.5Hz
+EEG = pop_eegfiltnew(EEG, 'locutoff',0.5);
+EEG = eeg_checkset( EEG );
+EEG = pop_saveset( EEG, 'filename','naseem_highpass_script.set','filepath',fullfile(data_path, lta_path, 'Naseem/'));
+
+%% Notch filtering at 50Hz and 100Hz
+EEG = pop_cleanline(EEG, 'bandwidth',2,'chanlist',[1:128] ,'computepower',1,'linefreqs',[50 100] ,'newversion',0,'normSpectrum',0,'p',0.01,'pad',2,'plotfigures',0,'scanforlines',0,'sigtype','Channels','taperbandwidth',2,'tau',100,'verb',1,'winsize',4,'winstep',2);EEG = eeg_checkset( EEG );
+EEG = eeg_checkset( EEG );
+EEG = pop_saveset( EEG, 'filename','naseem_notch_cleanline.set','filepath',fullfile(data_path, lta_path, 'Naseem/'));
+
+%% Rereference the data to average reference and retain Cz
+% todo: Doesn't work with eeglab v2023.0, file an upstream issue for this
+EEG = pop_reref( EEG, [],'refloc',struct('labels',{'Cz'},'Y',{0},'X',{6.2205e-16},'Z',{10.1588},'sph_theta',{0},'sph_phi',{90},'sph_radius',{10.1588},'theta',{0},'radius',{0},'type',{''},'ref',{'Cz'},'urchan',{132},'datachan',{0}));
+EEG = eeg_checkset( EEG );
+% Save for rereference
+[ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET); % Store dataset
+EEG = pop_saveset( EEG, 'filename','naseem_reref_script.set','filepath',fullfile(data_path, lta_path, 'Naseem/'));
+
+%% ICA
+EEG = pop_runica(EEG, 'icatype', 'runica', 'extended',1);
+EEG = eeg_checkset( EEG );
+
+EEG = pop_saveset( EEG, 'filename','naseem_ica.set','filepath',fullfile(data_path, lta_path, 'Naseem/'));
+eeglab redraw % Redraw the main EEGLAB window
+
+% To calculate the runtime of this script
 timeElapsed = toc;
+
+% Function to get the filename from a file path
+function filename = get_filename(filepath)
+    [~, filename, ~] = fileparts(filepath);
+end
+
+% rdir function definition
+function file_list = rdir(base_dir, file_pattern)
+    if nargin < 2
+        file_pattern = '';
+    end
+    d = dir(fullfile(base_dir, file_pattern));
+    is_dir = [d.isdir];
+    files = {d(~is_dir).name};  % Files
+    dirs = {d(is_dir).name};  % Directories
+    file_list = cellfun(@(x) fullfile(base_dir, x), files, 'UniformOutput', false);
+    
+    % Recursive call for subdirectories
+    for i = 1:numel(dirs)
+        dirname = dirs{i};
+        if ~strcmp(dirname, '.') && ~strcmp(dirname, '..')
+            subdir = fullfile(base_dir, dirname);
+            file_list = [file_list; rdir(subdir, file_pattern)]; %#ok<AGROW>
+        end
+    end
+end
