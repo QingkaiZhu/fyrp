@@ -4,9 +4,10 @@ MATLAB Script to read and preprocess NetStation EGI raw Data
    placed in the subfolders of LTA, HTA, MTA respectively
 2. In section 'Set data path': Change the data_path as the path which contains
    three unziped folders
-3. In section 'Load trial information from the E-prime xlsx file': Set
+3. Make sure the location file is stored in data_path
+4. In section 'Load trial information from the E-prime xlsx file': Set
    variables subjs and processed_path to the group you want to preprocess
-4. Make sure you are using eeglab v2023.0 with egilegacy and cleanline plugins
+5. Make sure you are using eeglab v2023.0 with egilegacy and cleanline plugins
    installed
 Author:
 - The event importing part was initially wrote by Garima Joshi
