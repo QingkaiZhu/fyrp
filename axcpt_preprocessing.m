@@ -3,7 +3,7 @@ MATLAB Script to read and preprocess NetStation EGI raw Data
 1. Unzip three data files in the same directory, three groups should be
    placed in the subfolders of LTA, HTA, MTA respectively
 2. In section 'Set data path': Change the data_path as the path which contains
-   three unziped folders
+   three unziped folders, and change the script_path
 3. Make sure the location file is stored in data_path
 4. In section 'Load trial information from the E-prime xlsx file': Set
    variables subjs and processed_path to the group you want to preprocess
@@ -23,7 +23,7 @@ close all
 
 %% Set data path
 % The location file should be placed under the data_path
-% Note: set the data_path for your system
+% Note: set the data_path and script_path for your system
 data_path = 'C:\Users\chuch\Documents\GitHub\fyrp\data\';
 lta_path = 'LTA\LTA_raw_xlsx\';
 lta_processed_path = 'preprocessed_data\LTA\';
