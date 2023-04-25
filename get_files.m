@@ -2,6 +2,7 @@
 clear
 clc
 close all
+
 data_path = 'C:\Users\chuch\Documents\GitHub\fyrp\data\';
 lta_path = 'LTA\LTA_raw_xlsx\';
 lta_processed_path = 'preprocessed_data\LTA\';
@@ -23,10 +24,10 @@ for i = 1:length(folders)
     folder = folders{i};
     
     % Recursively search for xlsx files in the current subfolder and its subfolders
-    xlsx_files = rdir(folder, ['**/*' file_ext_xlsx]);
+    xlsx_files = get_files_list(folder, ['**/*' file_ext_xlsx]);
     
     % Recursively search for raw files in the current subfolder and its subfolders
-    raw_files = rdir(folder, ['**/*' file_ext_raw]);
+    raw_files = get_files_list(folder, ['**/*' file_ext_raw]);
     
     % Filter out raw files starting with ".", junk files of the MacOS
     % filesystem
@@ -42,8 +43,11 @@ for i = 1:length(folders)
     for j = 1:length(xlsx_files)
         xlsx_file = xlsx_files{j};
         raw_file = raw_files{j};
+
+        % Extract the subject name
+        [~, file_name, ~] = fileparts(xlsx_file);
         
-        subject_files = struct('xlsx', xlsx_file, 'raw', raw_file);
+        subject_files = struct('xlsx', xlsx_file, 'raw', raw_file, 'name', file_name);
         
         switch true
             case strcmp(folder, fullfile(data_path, hta_path))
@@ -62,7 +66,7 @@ function filename = get_filename(filepath)
 end
 
 % rdir function definition
-function file_list = rdir(base_dir, file_pattern)
+function file_list = get_files_list(base_dir, file_pattern)
     if nargin < 2
         file_pattern = '';
     end
@@ -77,7 +81,7 @@ function file_list = rdir(base_dir, file_pattern)
         dirname = dirs{i};
         if ~strcmp(dirname, '.') && ~strcmp(dirname, '..')
             subdir = fullfile(base_dir, dirname);
-            file_list = [file_list; rdir(subdir, file_pattern)]; %#ok<AGROW>
+            file_list = [file_list; get_files_list(subdir, file_pattern)];
         end
     end
 end
