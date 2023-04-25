@@ -5,6 +5,7 @@ close all
 
 %% Set data path
 % The location file should be placed under the data_path
+% Note: set the path for your system
 data_path = 'C:\Users\chuch\Documents\GitHub\fyrp\data\';
 lta_path = 'LTA\LTA_raw_xlsx\';
 lta_processed_path = 'preprocessed_data\LTA\';
