@@ -1,3 +1,20 @@
+%{
+MATLAB Script to read and preprocess NetStation EGI raw Data
+1. Unzip three data files in the same directory, three groups should be
+   placed in the subfolders of LTA, HTA, MTA respectively
+2. In section 'Set data path': Change the data_path as the path which contains
+   three unziped folders
+3. In section 'Load trial information from the E-prime xlsx file': Set
+   variables subjs and processed_path to the group you want to preprocess
+4. Make sure you are using eeglab v2023.0 with egilegacy and cleanline plugins
+   installed
+Author:
+- The event importing part was initially wrote by Garima Joshi
+  garima AT cbcs.ac.in, Centre of Behavioural and Cognitive Sciences (CBCS) of
+  University of Allahabad.
+- The current version and remaining parts were revised by Kai
+%}
+
 %% Clear the workspace
 clear
 clc
@@ -5,7 +22,7 @@ close all
 
 %% Set data path
 % The location file should be placed under the data_path
-% Note: set the path for your system
+% Note: set the data_path for your system
 data_path = 'C:\Users\chuch\Documents\GitHub\fyrp\data\';
 lta_path = 'LTA\LTA_raw_xlsx\';
 lta_processed_path = 'preprocessed_data\LTA\';
@@ -13,6 +30,18 @@ mta_path = 'MTA\MTA_raw_xlsx\';
 mta_processed_path = 'preprocessed_data\MTA\';
 hta_path = 'HTA\HTA_raw_xlsx\';
 hta_processed_path = 'preprocessed_data\HTA\';
+
+% Check if the preprocessed_data folder exists
+processed_paths = {hta_processed_path, lta_processed_path, mta_processed_path};
+for i = 1 : length(processed_paths)
+    full_path = fullfile(data_path, processed_paths{i});
+
+    % Check if the folder exists
+    if ~exist(full_path, 'dir')
+        % If the folder doesn't exist, create it
+        mkdir(full_path);
+    end
+end
 
 script_path = 'C:\Users\chuch\Documents\GitHub\fyrp\fyrp';
 cd(script_path);
@@ -68,10 +97,6 @@ for i = 1:length(folders)
 end
 
 %% Load trial information from the E-prime xlsx file
-% The event importing part was initially wrote by Garima Joshi
-% garima@cbcs.ac.in, Centre of Behavioural and Cognitive Sciences (CBCS) of
-% University of Allahabad.
-% The current version was revised by Kai
 % There a 960 trials in totoal for each subject(160 trials/per block, 6 blocks)
 % Kai's update:
 % xlsread is not recommended in MATLAB R2019a or later for compatibility
@@ -90,7 +115,7 @@ processed_path = hta_processed_path;
 %% activate eeglab v2022.1, it seems there is a bug in v2023.0
 % Notes: Double check the bug and report to upstream
 eeglab_path = fileparts(which('eeglab.m')); % get EEGLAB path
-[ALLEEG EEG CURRENTSET ALLCOM] = eeglab; % start EEGLAB, make sure you have egilegacy plugin installed
+[ALLEEG EEG CURRENTSET ALLCOM] = eeglab; % start EEGLAB, make sure you have egilegacy and cleanline plugins installed
 
 for iSubjs = 1 : length(subjs)
     % To calculate the runtime of this subject
