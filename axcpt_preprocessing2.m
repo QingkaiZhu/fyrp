@@ -1,7 +1,6 @@
 %{
-MATLAB Script to read and preprocess NetStation EGI raw Data
-1. Unzip three data files in the same directory, three groups should be
-   placed in the subfolders of LTA, HTA, MTA respectively
+MATLAB Script to reject artificats components and extract epochs
+1. This script should be ran after axcpt_preprocessing.m
 2. In section 'Set data path': Change the data_path as the path which contains
    three unziped folders, and change the script_path
 3. Make sure the location file is stored in data_path
@@ -12,10 +11,7 @@ MATLAB Script to read and preprocess NetStation EGI raw Data
 6. Make sure you are using eeglab v2022.1 with egilegacy, ICLabel and 
    cleanline plugins installed
 Author:
-- The event importing part was initially wrote by Garima Joshi
-  garima AT cbcs.ac.in, Centre of Behavioural and Cognitive Sciences (CBCS) of
-  University of Allahabad.
-- The current version and remaining parts were wrote by Kai
+- Kai
 %}
 
 %% Clear the workspace
@@ -100,167 +96,17 @@ for i = 1:length(folders)
 end
 
 %% Load trial information from the E-prime xlsx file
-% There a 960 trials in totoal for each subject(160 trials/per block, 6 blocks)
-% Kai's update:
-% xlsread is not recommended in MATLAB R2019a or later for compatibility
-% considerations, use readtable instead, all we need is
-% column 23: Trial number
-% column 24: CellNumber, cue probe pair AX 1, AY 2, BX 3, BY 4
-% column 45: probe.ACC modified to probe_ACC by importing
-
 % Note: change subjs and processed_path before running the script
 % which group you want to pre-process, run the three groups one by one
-subjs = hta_subjects;
+subjs = mta_subjects;
 % subjs = lta_subjects;
 % subjs = mta_subjects;
-processed_path = hta_processed_path;
+processed_path = mta_processed_path;
 
 %% activate eeglab v2022.1, it seems there is a bug in v2023.0
 % Notes: Double check the bug and report to upstream
 eeglab_path = fileparts(which('eeglab.m')); % get EEGLAB path
 [ALLEEG EEG CURRENTSET ALLCOM] = eeglab; % start EEGLAB, make sure you have egilegacy and cleanline plugins installed
-
-for iSubjs = 1 : length(subjs)
-    % To calculate the runtime of this subject
-    tic
-    X = ['Pre-processing ' hta_subjects{1}.name ' which is the ' num2str(iSubjs) ' of the group'];
-    disp(X);
-
-    % Create new EEG set
-    STUDY = []; CURRENTSTUDY = 0; ALLEEG = []; EEG = []; CURRENTSET = []; ALLCOM = [];
-
-    opts = detectImportOptions(subjs{iSubjs}.xlsx);
-    opts.SelectedVariableNames = {'Trial', 'CellNumber', 'probe_ACC'};
-    T = readtable(subjs{iSubjs}.xlsx, opts);
-    % summary(T)
-    
-    % Export trial information from the xlsx file and store in datTrialInfo
-    datTrialInfo = cell(1, length(T.Trial));
-    for i = 1 : length(T.Trial)
-        datTrialInfo{i}.trialNum = T.Trial(i);
-        if T.CellNumber(i) == 1
-            datTrialInfo{i}.trialType = 'AX';
-        elseif T.CellNumber(i) == 2
-            datTrialInfo{i}.trialType = 'AY';
-        elseif T.CellNumber(i) == 3
-            datTrialInfo{i}.trialType = 'BX';
-        else
-            datTrialInfo{i}.trialType = 'BY';
-        end
-    
-        % Correct/Incorrect
-        if T.probe_ACC(i) == 0
-            datTrialInfo{i}.response = 0;
-        else
-            datTrialInfo{i}.response = 1;
-        end
-    end
-    
-    %% Import the raw data 
-    pop_editoptions( 'option_storedisk', 0); % Change option to process multiple datasets
-    % load data
-    EEG = pop_readegi(subjs{iSubjs}.raw, [],[],'auto');
-    % EEG.setname = subjs{iSubjs}.name;
-    EEG = eeg_checkset( EEG );
-    
-    % Inspect events before modification
-    % List event types
-    evtList = unique({EEG.event.type});
-    evt = struct2table(EEG.event);
-    for i = 1 : length(evtList)
-        fprintf("The number of event %s is %d.\n", evtList{i}, sum(ismember(evt.type(:), evtList{i})));
-    end
-    
-    %% Add new cue events to a loaded dataset 0.1 second before time-locking event
-    % The old method changed the urevent which contains the index of the event
-    % in the original (= wurh) urevent table, this supposed to remain unchanged.
-    % This method is from: https://eeglab.org/tutorials/11_Scripting/Event_Processing_command_line.html#scripts-for-creating-or-modifying-events
-    nevents = length(EEG.event);
-    iTrial = 0; % index for trial number
-    for iEvents = 1 : nevents
-        % Notes:
-        % For most of the trial, there are two resp events, left arraw key or
-        % right arrow key, so why should we insert new events after the first
-        % resp event in the initial script, what's the different between the
-        % two resp events? And why 0.1s was chosen as the event latency after
-        % the first resp event in every trial in the initial script?
-        
-        % In this version, we will insert the trial specific event 200ms before
-        % the cue+ and probe events
-        if ischar(EEG.event(iEvents).type) && (strcmpi(EEG.event(iEvents).type, 'cue+') || strcmpi(EEG.event(iEvents).type, 'prob')) % find the cue+ or prob events in every trial 
-            if strcmpi(EEG.event(iEvents).type, 'cue+')
-                iTrial = iTrial + 1;
-            end
-            % Add events relative to existing events
-            EEG.event(end+1) = EEG.event(iEvents); % Add event to end of event list
-            % Specifying the event latency to be 0.2 sec before cue+ or
-            % prob
-            EEG.event(end).latency = EEG.event(iEvents).latency - 0.2*EEG.srate;
-            % Change the trial type accordingly
-            if ischar(datTrialInfo{iTrial}.trialType)
-                trialType = upper(datTrialInfo{iTrial}.trialType);
-                response = datTrialInfo{iTrial}.response;
-                eventType = EEG.event(iEvents).type;
-        
-                % This could be:
-                % AXc: cue for correct AX trials
-                % AXp: prob for correct AX trials
-                % AXcI: cue for incorrect AX trials
-                % AXpI: prob for incorrect AX trials
-                EEG.event(end).type = get_event_type(trialType, response, eventType);
-            end
-        end
-    end
-    
-    % Adjust the order for all cue events
-    EEG = eeg_checkset(EEG, 'eventconsistency'); % Check all events for consistency
-    % eeglab redraw % Redraw the main EEGLAB window
-    
-    % Inspect events after modification
-    % List event types
-    evtList = unique({EEG.event.type});
-    evt = struct2table(EEG.event);
-    for i = 1 : length(evtList)
-        fprintf("The number of event %s is %d.\n", evtList{i}, sum(ismember(evt.type(:), evtList{i})));
-    end 
-    
-    %% Load the channle location file
-    EEG.chanlocs=readlocs(fullfile(data_path, 'Hydrocel GSN 128 1.0.sfp'));
-    % Remove the first three channels: FidNz, FidT9, FidT10, and the last empty Cz
-    EEG.chanlocs = EEG.chanlocs(4:end-1);
-    
-    % Set Cz as the original reference channel
-    % EEG.chanlocs=pop_chanedit(EEG.chanlocs, 'load',{ fullfile(data_path, 'Hydrocel GSN 128 1.0.sfp'), 'filetype', 'sfp'});
-    % [ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG, CURRENTSET); % Store dataset
-    for c = 1:EEG.nbchan
-        EEG.chanlocs(c).ref = 'Cz';
-    end
-    
-    %% High pass filtering the data at 0.5Hz
-    EEG = pop_eegfiltnew(EEG, 'locutoff',0.5);
-    EEG = eeg_checkset( EEG );
-    
-    %% Notch filtering at 50Hz and 100Hz
-    EEG = pop_cleanline(EEG, 'bandwidth',2,'chanlist',[1:128] ,'computepower',1,'linefreqs',[50 100] ,'newversion',0,'normSpectrum',0,'p',0.01,'pad',2,'plotfigures',0,'scanforlines',0,'sigtype','Channels','taperbandwidth',2,'tau',100,'verb',1,'winsize',4,'winstep',2);EEG = eeg_checkset( EEG );
-    EEG = eeg_checkset( EEG );
-    
-    %% Rereference the data to average reference and retain Cz
-    % Notes: Doesn't work with eeglab v2023.0, file an upstream issue for this
-    EEG = pop_reref( EEG, [],'refloc',struct('labels',{'Cz'},'Y',{0},'X',{6.2205e-16},'Z',{10.1588},'sph_theta',{0},'sph_phi',{90},'sph_radius',{10.1588},'theta',{0},'radius',{0},'type',{''},'ref',{'Cz'},'urchan',{132},'datachan',{0}));
-    EEG = eeg_checkset( EEG );
-    % Save for rereference
-    EEG = pop_saveset( EEG, 'filename', ['preprocessed_filtered-' subjs{iSubjs}.name '.set'], 'filepath', fullfile(data_path, processed_path));
-    
-    %% ICA
-    EEG = pop_runica(EEG, 'icatype', 'runica', 'extended',1);
-    EEG = eeg_checkset( EEG );
-    
-    EEG = pop_saveset( EEG, 'filename', ['preprocessed_ica-' subjs{iSubjs}.name '.set'], 'filepath', fullfile(data_path, processed_path));
-    eeglab redraw % Redraw the main EEGLAB window
-    
-    % To calculate the runtime of this subject
-    timeElapsed = toc;
-end
 
 %% Remove artifacts ICs via ICLabel
 for iSubjs = 1 : length(subjs)
