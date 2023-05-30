@@ -248,8 +248,8 @@ for iSubjs = 1 : length(subjs)
     EEG = pop_eegfiltnew(EEG, 'locutoff',0.5);
     EEG = eeg_checkset( EEG );
     
-    %% Notch filtering at 50Hz and 100Hz
-    EEG = pop_cleanline(EEG, 'bandwidth',2,'chanlist',[1:128] ,'computepower',1,'linefreqs',[50 100] ,'newversion',0,'normSpectrum',0,'p',0.01,'pad',2,'plotfigures',0,'scanforlines',0,'sigtype','Channels','taperbandwidth',2,'tau',100,'verb',1,'winsize',4,'winstep',2);EEG = eeg_checkset( EEG );
+    %% Notch filtering at 50Hz
+    EEG = pop_cleanline(EEG, 'bandwidth',2,'chanlist',[1:128] ,'computepower',1,'linefreqs',[50] ,'newversion',0,'normSpectrum',0,'p',0.01,'pad',2,'plotfigures',0,'scanforlines',0,'sigtype','Channels','taperbandwidth',2,'tau',100,'verb',1,'winsize',4,'winstep',2);EEG = eeg_checkset( EEG );
     EEG = eeg_checkset( EEG );
     
     %% Rereference the data to average reference and retain Cz
