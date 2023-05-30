@@ -23,80 +23,88 @@ clear
 clc
 close all
 
-%% Set data path
-% The location file should be placed under the data_path
-% Note: set the data_path and script_path for your system
-data_path = 'C:\Users\chuch\Documents\GitHub\fyrp\data\';
-lta_path = 'LTA\LTA_raw_xlsx\';
-lta_processed_path = 'preprocessed_data\LTA\';
-mta_path = 'MTA\MTA_raw_xlsx\';
-mta_processed_path = 'preprocessed_data\MTA\';
-hta_path = 'HTA\HTA_raw_xlsx\';
-hta_processed_path = 'preprocessed_data\HTA\';
-
-% Check if the preprocessed_data folder exists
-processed_paths = {hta_processed_path, lta_processed_path, mta_processed_path};
-for i = 1 : length(processed_paths)
-    full_path = fullfile(data_path, processed_paths{i});
-
-    % Check if the folder exists
-    if ~exist(full_path, 'dir')
-        % If the folder doesn't exist, create it
-        mkdir(full_path);
-    end
-end
-
 script_path = 'C:\Users\chuch\Documents\GitHub\fyrp\fyrp';
 cd(script_path);
 
-%% Get all the raw and xlsx files
-folders = {fullfile(data_path, lta_path), fullfile(data_path, hta_path), fullfile(data_path, mta_path)}; % List of subfolders
-file_ext_xlsx = '.xlsx'; % File extension for the xlsx files
-file_ext_raw = '.raw'; % File extension for the corresponding raw files
-
-hta_subjects = cell(1, 19);
-lta_subjects = cell(1, 14);
-mta_subjects = cell(1, 20);
-
-% Iterate through each subfolder
-for i = 1:length(folders)
-    folder = folders{i};
+%% Set data path
+saved_raw_xlsx_name = 'raw_xlsx_filenames.mat';
+if exist(fullfile(script_path, saved_raw_xlsx_name), 'file') == 2
+    load(fullfile(script_path, saved_raw_xlsx_name));
+else
+    % The location file should be placed under the data_path
+    % Note: set the data_path and script_path for your system
+    data_path = 'C:\Users\chuch\Documents\GitHub\fyrp\data\';
+    lta_path = 'LTA\LTA_raw_xlsx\';
+    lta_processed_path = 'preprocessed_data\LTA\';
+    mta_path = 'MTA\MTA_raw_xlsx\';
+    mta_processed_path = 'preprocessed_data\MTA\';
+    hta_path = 'HTA\HTA_raw_xlsx\';
+    hta_processed_path = 'preprocessed_data\HTA\';
     
-    % Recursively search for xlsx files in the current subfolder and its subfolders
-    xlsx_files = get_files_list(folder, ['**/*' file_ext_xlsx]);
+    % Check if the preprocessed_data folder exists
+    processed_paths = {hta_processed_path, lta_processed_path, mta_processed_path};
+    for i = 1 : length(processed_paths)
+        full_path = fullfile(data_path, processed_paths{i});
     
-    % Recursively search for raw files in the current subfolder and its subfolders
-    raw_files = get_files_list(folder, ['**/*' file_ext_raw]);
-    
-    % Filter out raw files starting with ".", junk files of the MacOS
-    % filesystem
-    raw_files = raw_files(arrayfun(@(x) ~startsWith(get_filename(x{1}), '.'), raw_files));
-    
-    % Ensure the number of xlsx and raw files match
-    if length(xlsx_files) ~= length(raw_files)
-        warning(['The number of xlsx and raw files in folder ' folder ' do not match']);
-        continue;
-    end
-    
-    % Iterate through each xlsx file and its corresponding raw file
-    for j = 1:length(xlsx_files)
-        xlsx_file = xlsx_files{j};
-        raw_file = raw_files{j};
-
-        % Extract the subject name
-        [~, file_name, ~] = fileparts(xlsx_file);
-        
-        subject_files = struct('xlsx', xlsx_file, 'raw', raw_file, 'name', file_name);
-        
-        switch true
-            case strcmp(folder, fullfile(data_path, hta_path))
-                hta_subjects{j} = subject_files;
-            case strcmp(folder, fullfile(data_path, lta_path))
-                lta_subjects{j} = subject_files;
-            case strcmp(folder, fullfile(data_path, mta_path))
-                mta_subjects{j} = subject_files;
+        % Check if the folder exists
+        if ~exist(full_path, 'dir')
+            % If the folder doesn't exist, create it
+            mkdir(full_path);
         end
     end
+    
+    
+    
+    %% Get all the raw and xlsx files
+    folders = {fullfile(data_path, lta_path), fullfile(data_path, hta_path), fullfile(data_path, mta_path)}; % List of subfolders
+    file_ext_xlsx = '.xlsx'; % File extension for the xlsx files
+    file_ext_raw = '.raw'; % File extension for the corresponding raw files
+    
+    hta_subjects = cell(1, 19);
+    lta_subjects = cell(1, 14);
+    mta_subjects = cell(1, 20);
+    
+    % Iterate through each subfolder
+    for i = 1:length(folders)
+        folder = folders{i};
+        
+        % Recursively search for xlsx files in the current subfolder and its subfolders
+        xlsx_files = get_files_list(folder, ['**/*' file_ext_xlsx]);
+        
+        % Recursively search for raw files in the current subfolder and its subfolders
+        raw_files = get_files_list(folder, ['**/*' file_ext_raw]);
+        
+        % Filter out raw files starting with ".", junk files of the MacOS
+        % filesystem
+        raw_files = raw_files(arrayfun(@(x) ~startsWith(get_filename(x{1}), '.'), raw_files));
+        
+        % Ensure the number of xlsx and raw files match
+        if length(xlsx_files) ~= length(raw_files)
+            warning(['The number of xlsx and raw files in folder ' folder ' do not match']);
+            continue;
+        end
+        
+        % Iterate through each xlsx file and its corresponding raw file
+        for j = 1:length(xlsx_files)
+            xlsx_file = xlsx_files{j};
+            raw_file = raw_files{j};
+    
+            % Extract the subject name
+            [~, file_name, ~] = fileparts(xlsx_file);
+            
+            subject_files = struct('xlsx', xlsx_file, 'raw', raw_file, 'name', file_name);
+            
+            switch true
+                case strcmp(folder, fullfile(data_path, hta_path))
+                    hta_subjects{j} = subject_files;
+                case strcmp(folder, fullfile(data_path, lta_path))
+                    lta_subjects{j} = subject_files;
+                case strcmp(folder, fullfile(data_path, mta_path))
+                    mta_subjects{j} = subject_files;
+            end
+        end
+    end
+    save(fullfile(script_path, saved_raw_xlsx_name));
 end
 
 %% Load trial information from the E-prime xlsx file
