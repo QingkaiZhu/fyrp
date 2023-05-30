@@ -300,7 +300,7 @@ end
 
 %% Extract epochs
 % The time-locking events you want to extract
-epochingEvts = {'AYc', 'BXc'};
+epochingEvts = {'AYc', 'BXc', 'AXc', 'BYc'};
 for iSubjs = 1 : length(subjs)
     for iEvt = 1:length(epochingEvts)
         epochingEvt = epochingEvts{iEvt};
@@ -314,7 +314,11 @@ for iSubjs = 1 : length(subjs)
         % Extract epochs for time-locking event (-1s to 2s)
         EEG = pop_epoch( EEG, {  epochingEvt  }, [-1  2], 'newname', 'EGI file pruned with ICA epochs', 'epochinfo', 'yes');
         EEG = eeg_checkset( EEG );
-        
+
+        % Removing baseline values -1s to 0s
+        EEG = pop_rmbase( EEG, [-1000 0] ,[]);
+        EEG = eeg_checkset( EEG );
+
         EEG = pop_saveset( EEG, 'filename', ['preprocessed_epoched_' epochingEvt '-' subjs{iSubjs}.name '.set'], 'filepath', fullfile(data_path, processed_path));
         eeglab redraw % Redraw the main EEGLAB window
     end
