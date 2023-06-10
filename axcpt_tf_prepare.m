@@ -51,5 +51,21 @@ for j = 1:length(rootDirs)
             newFilePath = fullfile(fullPath, subjectFiles(k).name);
             movefile(oldFilePath, newFilePath);
         end
+
+                % Define the patterns for files to move back to the parent directory
+        moveBackPatterns = {'preprocessed_epoched_AXp*', 'preprocessed_epoched_AYp*'};
+
+        % Iterate over each pattern
+        for m = 1:length(moveBackPatterns)
+            % Get a list of files that match the pattern
+            moveBackFiles = dir(fullfile(fullPath, moveBackPatterns{m}));
+
+            % Iterate over each file and move it back to the parent directory
+            for n = 1:length(moveBackFiles)
+                oldFilePath = fullfile(moveBackFiles(n).folder, moveBackFiles(n).name);
+                newFilePath = fullfile(rootDir, moveBackFiles(n).name);
+                movefile(oldFilePath, newFilePath);
+            end
+        end
     end
 end
