@@ -1,0 +1,146 @@
+---
+title: "test"
+author: "Qingkai Zhu"
+date: "2023-06-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r pressure, echo=FALSE}
+# Behavioral analysis for the AX-CPT E-Prime log files
+# Author: Benjamin Berkhout
+library(plyr)
+library(dplyr)
+library(readxl)
+library(ggplot2)
+
+rm(list = ls())
+
+# Function to add all files in directory to one df
+aggr_dat <- function (files, condition, aggreted_dat, all_dat){
+  
+  # total_trial_rm <- 0
+  
+  for (file in files){
+    dat <- select(read_excel(paste0(data_dir, "/",condition, "/", file)), Subject, Name, Trial, cue, probe, probe.RT, probe.ACC)
+    subj_name <- strsplit(file, "/")[[1]][2]
+    # print(nrow(dat))
+    # Create 'isOutlierTrial' column, initially setting all to 0
+    dat$isOutlierTrial <- 0
+    
+    # # Remove subject if less than 60% accuracy on BY trials
+    # BY_acc <- mean(dat[dat$cue == "B" & dat$probe == "Y",]$probe.ACC)
+    # BX_acc <- mean(dat[dat$cue == "B" & dat$probe == "X",]$probe.ACC)
+    # AY_acc <- mean(dat[dat$cue == "A" & dat$probe == "Y",]$probe.ACC)
+    # BX_acc <- mean(dat[dat$cue == "A" & dat$probe == "X",]$probe.ACC)
+    # if (BY_acc < 0.6) {
+    #   print(paste0("Subject removed: ", subj_name, " BY_ACC: ", BY_acc, " BX_ACC: ", BX_acc, " AX_ACC: ", AX_acc, " AY_ACC: ", AY_acc, " group: ", condition, " all acc: ", mean(dat$probe.ACC)))
+    #   next
+    # }
+    
+    # Remove trials if RT is more than 3 SD from the mean
+    correct_dat <- dat[dat$probe.ACC == 1,]
+    lower_threshold <- mean(correct_dat$probe.RT) - 3*sd(correct_dat$probe.RT)
+    upper_threshold <- mean(correct_dat$probe.RT) + 3*sd(correct_dat$probe.RT)
+    # 
+    # # total_trial_rm <- total_trial_rm + sum(dat$probe.RT < lower_threshold | dat$probe.RT > upper_threshold)
+    # dat <- dat[dat$probe.RT > lower_threshold & dat$probe.RT < upper_threshold,]
+    dat$isOutlierTrial[dat$probe.RT < lower_threshold | dat$probe.RT > upper_threshold] <- 1
+
+    dat$group <- condition
+    
+    # Average trials
+    subj_aggr <- ddply(dat, c("cue", "probe", "Subject"), summarise,
+                       conACC = mean(probe.ACC),
+                       conRT = mean(probe.RT)
+    )
+    subj_aggr$cond <- condition
+    # updated
+    subj_aggr$meanRT = mean(dat$probe.RT)
+    subj_aggr$meanACC = mean(dat$probe.ACC)
+    subj_aggr$name = subj_name
+    aggreted_dat <- rbind(aggreted_dat, subj_aggr)
+    all_dat <- rbind(all_dat, dat)
+  }
+  # print(total_trial_rm)
+  return (list(aggreted_dat = aggreted_dat, all_dat = all_dat))
+}
+data_dir <- "C:/Users/chuch/Documents/GitHub/fyrp/data"
+conditions <- c("LTA", "MTA", "HTA")
+
+lta_files <- list.files(paste0(data_dir, "/LTA"), pattern="*/*.xlsx", recursive = T)
+mta_files <- list.files(paste0(data_dir, "/MTA"), pattern="*/*.xlsx", recursive = T)
+hta_files <- list.files(paste0(data_dir, "/HTA"), pattern="*/*.xlsx", recursive = T)
+
+
+# Aggregate all anxiety groups into one df
+cond_aggr <- data.frame()
+all_dat <- data.frame()
+results <- aggr_dat(lta_files, conditions[1], cond_aggr, all_dat)
+cond_aggr <- results$aggreted_dat
+all_dat <- results$all_dat
+
+results <- aggr_dat(mta_files, conditions[2], cond_aggr, all_dat)
+cond_aggr <- results$aggreted_dat
+all_dat <- results$all_dat
+
+results <- aggr_dat(hta_files, conditions[3], cond_aggr, all_dat)
+cond_aggr <- results$aggreted_dat
+all_dat <- results$all_dat
+
+
+cond_aggr$cond <- factor(cond_aggr$cond, levels=c("LTA", "MTA", "HTA"))
+cond_aggr$pair <- paste0(cond_aggr$cue, cond_aggr$probe)
+```
+
+```{r}
+group_aggr <- ddply(all_dat, c("cue", "probe", "group"), summarise,
+                   conACC = mean(probe.ACC), sderrACC = sd(probe.ACC) / sqrt(length(probe.ACC)),
+                   conRT = mean(probe.RT), sderrRT = sd(probe.RT) / sqrt(length(probe.RT))
+)
+
+group_aggr
+library(ggplot2)
+
+ggplot(group_aggr, aes(x = paste(cue, probe), y = conACC, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(x = "Cue-Probe Pair", y = "Mean Accuracy", fill = "Group") +
+  theme_minimal() +
+  theme(text = element_text(size = 12)) +
+  facet_wrap(~ group, scales = "free")
+
+ggplot(group_aggr, aes(x = interaction(cue, probe), y = conACC, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(x = "Cue-Probe Pair", y = "Mean Accuracy", fill = "Group") +
+  theme_minimal() +
+  theme(text = element_text(size = 12)) +
+  scale_x_discrete(labels = c("A-X", "A-Y"))  # Add labels to x-axis
+
+# Accuracy plot
+ggplot(group_aggr, aes(x = interaction(cue, probe), y = conACC, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = conACC - sderrACC, ymax = conACC + sderrACC), width = 0.2,
+                position = position_dodge(.9)) +
+  labs(x = "Cue-Probe Pair", y = "Mean Accuracy", fill = "Group") +
+  theme_minimal() +
+  theme(text = element_text(size = 12)) +
+  scale_x_discrete(labels = c("A.X" = "A-X", "A.Y" = "A-Y", "B.X" = "B-X", "B.Y" = "B-Y"))  # Updated labels
+
+# RT plot
+ggplot(group_aggr, aes(x = interaction(cue, probe), y = conRT, fill = group)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_errorbar(aes(ymin = conRT - sderrRT, ymax = conRT + sderrRT), width = 0.2,
+                position = position_dodge(.9)) +
+  labs(x = "Cue-Probe Pair", y = "Mean Reaction Time", fill = "Group") +
+  theme_minimal() +
+  theme(text = element_text(size = 12)) +
+  scale_x_discrete(labels = c("A.X" = "A-X", "A.Y" = "A-Y", "B.X" = "B-X", "B.Y" = "B-Y"))  # Updated labels
+
+
+```
+
+
