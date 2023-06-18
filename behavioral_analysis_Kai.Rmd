@@ -1,55 +1,39 @@
 ---
-title: "test"
+title: "Behavioral analysis for the AX-CPT E-Prime log files"
 author: "Qingkai Zhu"
-date: "2023-06-08"
+date: "2023-06-18"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
+# Behavioral analysis for the AX-CPT E-Prime log files
 
 ```{r pressure, echo=FALSE}
-# Behavioral analysis for the AX-CPT E-Prime log files
-# Author: Benjamin Berkhout
 library(plyr)
 library(dplyr)
 library(readxl)
 library(ggplot2)
+library(tidyr)
 
 rm(list = ls())
 
 # Function to add all files in directory to one df
 aggr_dat <- function (files, condition, aggreted_dat, all_dat){
   
-  # total_trial_rm <- 0
-  
   for (file in files){
     dat <- select(read_excel(paste0(data_dir, "/",condition, "/", file)), Subject, Name, Trial, cue, probe, probe.RT, probe.ACC)
     subj_name <- strsplit(file, "/")[[1]][2]
-    # print(nrow(dat))
     # Create 'isOutlierTrial' column, initially setting all to 0
     dat$isOutlierTrial <- 0
-    
-    # # Remove subject if less than 60% accuracy on BY trials
-    # BY_acc <- mean(dat[dat$cue == "B" & dat$probe == "Y",]$probe.ACC)
-    # BX_acc <- mean(dat[dat$cue == "B" & dat$probe == "X",]$probe.ACC)
-    # AY_acc <- mean(dat[dat$cue == "A" & dat$probe == "Y",]$probe.ACC)
-    # BX_acc <- mean(dat[dat$cue == "A" & dat$probe == "X",]$probe.ACC)
-    # if (BY_acc < 0.6) {
-    #   print(paste0("Subject removed: ", subj_name, " BY_ACC: ", BY_acc, " BX_ACC: ", BX_acc, " AX_ACC: ", AX_acc, " AY_ACC: ", AY_acc, " group: ", condition, " all acc: ", mean(dat$probe.ACC)))
-    #   next
-    # }
     
     # Remove trials if RT is more than 3 SD from the mean
     correct_dat <- dat[dat$probe.ACC == 1,]
     lower_threshold <- mean(correct_dat$probe.RT) - 3*sd(correct_dat$probe.RT)
     upper_threshold <- mean(correct_dat$probe.RT) + 3*sd(correct_dat$probe.RT)
-    # 
-    # # total_trial_rm <- total_trial_rm + sum(dat$probe.RT < lower_threshold | dat$probe.RT > upper_threshold)
-    # dat <- dat[dat$probe.RT > lower_threshold & dat$probe.RT < upper_threshold,]
-    dat$isOutlierTrial[dat$probe.RT < lower_threshold | dat$probe.RT > upper_threshold] <- 1
+
+    dat$isOutlierTrial[dat$probe.ACC == 1 & (dat$probe.RT < lower_threshold | dat$probe.RT > upper_threshold)] <- 1
 
     dat$group <- condition
     
@@ -66,16 +50,15 @@ aggr_dat <- function (files, condition, aggreted_dat, all_dat){
     aggreted_dat <- rbind(aggreted_dat, subj_aggr)
     all_dat <- rbind(all_dat, dat)
   }
-  # print(total_trial_rm)
   return (list(aggreted_dat = aggreted_dat, all_dat = all_dat))
 }
+
 data_dir <- "C:/Users/chuch/Documents/GitHub/fyrp/data"
 conditions <- c("LTA", "MTA", "HTA")
 
 lta_files <- list.files(paste0(data_dir, "/LTA"), pattern="*/*.xlsx", recursive = T)
 mta_files <- list.files(paste0(data_dir, "/MTA"), pattern="*/*.xlsx", recursive = T)
 hta_files <- list.files(paste0(data_dir, "/HTA"), pattern="*/*.xlsx", recursive = T)
-
 
 # Aggregate all anxiety groups into one df
 cond_aggr <- data.frame()
@@ -92,9 +75,9 @@ results <- aggr_dat(hta_files, conditions[3], cond_aggr, all_dat)
 cond_aggr <- results$aggreted_dat
 all_dat <- results$all_dat
 
-
 cond_aggr$cond <- factor(cond_aggr$cond, levels=c("LTA", "MTA", "HTA"))
 cond_aggr$pair <- paste0(cond_aggr$cue, cond_aggr$probe)
+all_dat$pair <- paste0(all_dat$cue, all_dat$probe)
 ```
 
 ```{r}
@@ -104,21 +87,6 @@ group_aggr <- ddply(all_dat, c("cue", "probe", "group"), summarise,
 )
 
 group_aggr
-library(ggplot2)
-
-ggplot(group_aggr, aes(x = paste(cue, probe), y = conACC, fill = group)) +
-  geom_bar(stat = "identity", position = position_dodge()) +
-  labs(x = "Cue-Probe Pair", y = "Mean Accuracy", fill = "Group") +
-  theme_minimal() +
-  theme(text = element_text(size = 12)) +
-  facet_wrap(~ group, scales = "free")
-
-ggplot(group_aggr, aes(x = interaction(cue, probe), y = conACC, fill = group)) +
-  geom_bar(stat = "identity", position = position_dodge()) +
-  labs(x = "Cue-Probe Pair", y = "Mean Accuracy", fill = "Group") +
-  theme_minimal() +
-  theme(text = element_text(size = 12)) +
-  scale_x_discrete(labels = c("A-X", "A-Y"))  # Add labels to x-axis
 
 # Accuracy plot
 ggplot(group_aggr, aes(x = interaction(cue, probe), y = conACC, fill = group)) +
@@ -140,7 +108,162 @@ ggplot(group_aggr, aes(x = interaction(cue, probe), y = conRT, fill = group)) +
   theme(text = element_text(size = 12)) +
   scale_x_discrete(labels = c("A.X" = "A-X", "A.Y" = "A-Y", "B.X" = "B-X", "B.Y" = "B-Y"))  # Updated labels
 
-
 ```
 
+# Outlier Trials
 
+```{r}
+# Summarise data for group
+outlier_summary_group <- all_dat %>% 
+  filter(isOutlierTrial == 1) %>%  # Select only outlier trials
+  group_by(group) %>%  # Group by 'group'
+  summarise(count = n())  # Count number of outliers in each group
+# Add proportion
+outlier_summary_group <- outlier_summary_group %>% 
+  mutate(prop = count / sum(count))  # Calculate proportion of total for each group
+# Add labels to data for group
+outlier_summary_group <- outlier_summary_group %>% 
+  mutate(label = paste(count, "(", scales::percent(prop), ")"))
+# Create pie chart with labels
+ggplot(outlier_summary_group, aes(x = "", y = prop, fill = group)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  theme(legend.position = "right") +
+  guides(fill = guide_legend(title = "Group")) +
+  labs(title = "Distribution of Outlier Trials by Group",
+       subtitle = "Proportion of total outlier trials") +
+  geom_text(aes(label = label), position = position_stack(vjust = 0.5))
+
+# Summarise data for pair
+outlier_summary_pair <- all_dat %>% 
+  filter(isOutlierTrial == 1) %>%  # Select only outlier trials
+  group_by(pair) %>%  # Group by 'pair'
+  summarise(count = n())  # Count number of outliers in each pair
+# Add proportion
+outlier_summary_pair <- outlier_summary_pair %>% 
+  mutate(prop = count / sum(count))  # Calculate proportion of total for each pair
+# Add labels to data for pair
+outlier_summary_pair <- outlier_summary_pair %>% 
+  mutate(label = paste(count, "(", scales::percent(prop), ")"))
+# Create pie chart with labels
+ggplot(outlier_summary_pair, aes(x = "", y = prop, fill = pair)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  theme(legend.position = "right") +
+  guides(fill = guide_legend(title = "Pair")) +
+  labs(title = "Distribution of Outlier Trials by Cue-Probe Pair",
+       subtitle = "Proportion of total outlier trials") +
+  geom_text(aes(label = label), position = position_stack(vjust = 0.5))
+
+# Filter only the outlier trials
+outlier_trials <- all_dat %>% filter(isOutlierTrial == 1)
+
+# Get the range of RT for each pair
+rt_ranges <- outlier_trials %>%
+  group_by(pair) %>%
+  summarise(min_rt = min(probe.RT, na.rm = TRUE), max_rt = max(probe.RT, na.rm = TRUE))
+
+# Print the ranges
+print(rt_ranges)
+
+# Create a boxplot of RTs for each pair
+ggplot(outlier_trials, aes(x = pair, y = probe.RT)) +
+  geom_boxplot() +
+  labs(x = "Cue-Probe Pair", y = "Response Time (RT)", 
+       title = "Boxplot of Response Times for Outlier Trials by Cue-Probe Pair")
+
+# Create a scatter plot of RTs for each pair
+ggplot(outlier_trials, aes(x = pair, y = probe.RT)) +
+  geom_point() +
+  labs(x = "Cue-Probe Pair", y = "Response Time (RT)", 
+       title = "Scatterplot of Response Times for Outlier Trials by Cue-Probe Pair")
+
+```
+# Outlier Subjects
+There are five subjects who have less than 60% accuracy on BY trials, and correspondingly they also have low accuracy on BX trials.
+
+- "Subject removed: Ganga BY_ACC: 0.364583333333333 BX_ACC: 0.427083333333333 AX_ACC: 0.988095238095238 AY_ACC: 0.927083333333333 group: LTA all acc: 0.863541666666667"
+- "Subject removed: jayant BY_ACC: 0.510416666666667 BX_ACC: 0.5 AX_ACC: 0.979166666666667 AY_ACC: 0.729166666666667 group: MTA all acc: 0.859375"
+- "Subject removed: kamal BY_ACC: 0.583333333333333 BX_ACC: 0.5625 AX_ACC: 0.96577380952381 AY_ACC: 0.65625 group: MTA all acc: 0.85625"
+- "Subject removed: sonali BY_ACC: 0.59375 BX_ACC: 0.59375 AX_ACC: 0.793154761904762 AY_ACC: 0.666666666666667 group: MTA all acc: 0.740625"
+- "Subject removed: aarav BY_ACC: 0.572916666666667 BX_ACC: 0.541666666666667 AX_ACC: 0.992559523809524 AY_ACC: 0.614583333333333 group: HTA all acc: 0.867708333333333"
+
+```{r}
+library(tidyr)
+# Filter and summarise data
+low_acc_summary <- cond_aggr %>%
+  filter(conACC < 0.6) %>%
+  group_by(pair) %>%
+  summarise(count = n())
+
+# Add proportion
+low_acc_summary <- low_acc_summary %>%
+  mutate(prop = count / sum(count),
+         label = paste(count, "(", scales::percent(prop), ")"))
+
+# Create pie chart
+ggplot(low_acc_summary, aes(x = "", y = prop, fill = pair)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  theme(legend.position = "right") +
+  guides(fill = guide_legend(title = "Pair")) +
+  labs(title = "Distribution of Low Accuracy Subject by Cue-Probe Pair",
+       subtitle = "Proportion of total low accuracy trials") +
+  geom_text(aes(label = label), position = position_stack(vjust = 0.5))
+
+# Filter cond_aggr
+low_acc_cond_aggr <- cond_aggr %>%
+  filter(conACC < 0.6)
+
+# Join with group_aggr
+comparison_df <- left_join(low_acc_cond_aggr, group_aggr, by = c("cue" = "cue", "probe" = "probe", "cond" = "group"))
+
+# View comparison_df
+head(comparison_df)
+
+
+ggplot(comparison_df, aes(x = conRT.x, y = conRT.y)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(x = "conRT (low_acc_cond_aggr)", y = "conRT (group_aggr)",
+       title = "Comparison of conRT in low_acc_cond_aggr and group_aggr")
+
+# Reformat data for easier plotting
+comparison_df_melt <- comparison_df %>% 
+  pivot_longer(c(conRT.x, conRT.y), names_to = "source", values_to = "conRT")
+
+# Adjust source labels for clarity
+comparison_df_melt$source <- ifelse(comparison_df_melt$source == "conRT.x", "low_acc_cond_aggr", "group_aggr")
+
+# Plot
+ggplot(comparison_df_melt, aes(x = pair, y = conRT, fill = source)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~Subject) +
+  labs(x = "Pair", y = "conRT", fill = "Source",
+       title = "Comparison of conRT in low_acc_cond_aggr and group_aggr",
+       subtitle = "Facetted by Subject") +
+  theme_minimal()
+
+# Summarise data
+low_acc_summary_group <- low_acc_cond_aggr %>%
+  group_by(cond) %>%  # Group by 'cond'
+  summarise(count = n())  # Count number of rows in each condition
+
+# Calculate proportion
+low_acc_summary_group <- low_acc_summary_group %>% 
+  mutate(prop = count / sum(count))  # Calculate proportion of total for each condition
+
+# Create pie chart
+ggplot(low_acc_summary_group, aes(x = "", y = prop, fill = cond)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  theme(legend.position = "right") +
+  guides(fill = guide_legend(title = "Condition")) +
+  labs(title = "Distribution of Low Accuracy Trials by Condition",
+       subtitle = "Proportion of total low accuracy trials")
+
+```
